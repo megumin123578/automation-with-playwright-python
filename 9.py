@@ -249,7 +249,7 @@ def login_google(
                 WebDriverWait(driver, 30).until(EC.url_contains(expected_post_login_url_contains))
                 print(f"[{email}] Login successful and returned to expected page.")
                 time.sleep(6)
-                # ✅ KHÔNG quit nếu keep_open=True
+                # KHÔNG quit nếu keep_open=True
                 if not keep_open and driver:
                     driver.quit()
                     driver = None
@@ -304,7 +304,7 @@ def login_google(
                 print(f"[{email}] Max retries reached after exceptions. Aborting.")
                 return False
         finally:
-            # 🔐 Chỉ đóng trong finally nếu KHÔNG keep_open
+            # Chỉ đóng trong finally nếu KHÔNG keep_open
             if not keep_open and driver:
                 try:
                     driver.quit()
