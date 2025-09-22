@@ -13,7 +13,10 @@ import time
 import random
 # Danh sách tài khoản Google
 accounts = [
-    {"email": "megumin123578@gmail.com", "password": "V!etdu1492003"},
+    # {"email": "tanthaot017@gmail.com", "password": "qafGQOUOr4m"},
+    # {"email": "c07435890@gmail.com", "password": "V!etdu1492003"},
+    {"email": "thichauduong154@gmail.com", "password": "H5E7SfCDuFd"},
+    
 ]
 
 def sanitize_filename(s: str) -> str:
@@ -51,25 +54,94 @@ def is_captcha_present(driver):
     return ("captcha" in page) or ("recaptcha" in page) or ("g-recaptcha" in page)
 
 def click_if_next_button(driver, timeout=4):
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
+    time.sleep(0.3)
 
+    # 1) Nếu có popup/new window, chuyển sang window mới nhất
+    try:
+        if len(driver.window_handles) > 1:
+            driver.switch_to.window(driver.window_handles[-1])
+            print("[next] switched to latest window")
+    except Exception:
+        pass
+
+    # 2) Bộ selector rộng (VN/EN + aria-label + role + id phổ biến)
     XPATHS = [
-        "//button/span[normalize-space()='Tiếp theo']/..",
-        "//button/span[normalize-space()='Next']/..",
-        "//button[normalize-space()='Tiếp theo']",
-        "//button[normalize-space()='Next']",
-        "//*[@id='next']",
+        # VI
+        "//*[self::button or @role='button'][.//span[normalize-space()='Tiếp theo'] or normalize-space()='Tiếp theo']",
         "//*[@id='passwordNext']",
+        # EN (case-insensitive)
+        "//*[self::button or @role='button'][translate(normalize-space(.),'NEXT','next')='next']",
+        "//*[contains(translate(@aria-label,'NEXT','next'),'next')]",
+        "//*[@id='next' or @id='identifierNext' or @id='passwordNext']",
+        # một số flow dùng 'Continue'
+        "//*[self::button or @role='button'][translate(normalize-space(.),'CONTINUE','continue')='continue']",
+        "//*[contains(translate(@aria-label,'CONTINUE','continue'),'continue')]",
     ]
-    for xp in XPATHS:
+
+    def try_click(el):
+        # đưa vào tầm nhìn
         try:
-            el = WebDriverWait(driver, timeout).until(EC.element_to_be_clickable((By.XPATH, xp)))
-            el.click()
-            return True
+            driver.execute_script("arguments[0].scrollIntoView({block:'center', inline:'center'});", el)
+            time.sleep(0.1)
+        except Exception:
+            pass
+        # 3 kiểu click
+        for clicker in (
+            lambda e: e.click(),
+            lambda e: ActionChains(driver).move_to_element(e).pause(0.05).click().perform(),
+            lambda e: driver.execute_script("arguments[0].click();", e),
+        ):
+            try:
+                clicker(el)
+                return True
+            except Exception:
+                continue
+        return False
+
+    def search_and_click_in_current_context():
+        # chờ page state ổn định một nhịp (tránh overlay)
+        try:
+            WebDriverWait(driver, 3).until(lambda d: d.execute_script("return document.readyState") in ("interactive","complete"))
+        except Exception:
+            pass
+
+        # nếu có overlay che, chờ nó biến mất (best-effort)
+        # (bỏ qua nếu không có overlay selector cụ thể)
+
+        for xp in XPATHS:
+            try:
+                el = WebDriverWait(driver, timeout).until(EC.element_to_be_clickable((By.XPATH, xp)))
+                if try_click(el):
+                    print(f"[next] clicked via {xp}")
+                    return True
+                else:
+                    print(f"[next] found but could not click: {xp}")
+            except Exception:
+                continue
+        return False
+
+    # 3) Thử ở document chính
+    if search_and_click_in_current_context():
+        return True
+
+    # 4) Thử trong tất cả iframe
+    try:
+        frames = driver.find_elements(By.TAG_NAME, "iframe")
+    except Exception:
+        frames = []
+
+    for idx, fr in enumerate(frames):
+        try:
+            driver.switch_to.default_content()
+            driver.switch_to.frame(fr)
+            if search_and_click_in_current_context():
+                driver.switch_to.default_content()
+                return True
         except Exception:
             continue
+
+    driver.switch_to.default_content()
+    print("[next] not found/clickable -> return False")
     return False
 
 def scroll_modal_and_click_continue(driver, timeout=8):
