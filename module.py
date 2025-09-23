@@ -2,12 +2,6 @@
 from lib import *
 
 
-accounts = [
-    {"email": "tanthaot017@gmail.com", "password": "qafGQOUOr4m"},
-    # {"email": "c07435890@gmail.com", "password": "V!etdu1492003"},
-    {"email": "thichauduong154@gmail.com", "password": "H5E7SfCDuFd"},
-    
-]
 
 def click_if_next_button(driver, timeout=4):
     time.sleep(0.3)
@@ -232,18 +226,16 @@ def scroll_modal_and_click_continue(driver, timeout=8):
         return False
 
 
-
-
-
 def login_google(
     email,
     password,
     max_retries=2,
     manual_captcha_wait=90,
     expected_post_login_url_contains="labs.google/flow",
-    keep_open=False
+    keep_open=False,
+    driver = None,
 ):
-    driver = None
+    
     retry_count = 0
 
     while retry_count <= max_retries:

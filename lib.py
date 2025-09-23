@@ -50,3 +50,4 @@ def is_captcha_present(driver):
     page = driver.page_source.lower()
     return ("captcha" in page) or ("recaptcha" in page) or ("g-recaptcha" in page)
 
+
