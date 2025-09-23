@@ -11,9 +11,11 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 import time
 import random
+
+DEBUG = False
 # Danh sách tài khoản Google
 accounts = [
-    # {"email": "tanthaot017@gmail.com", "password": "qafGQOUOr4m"},
+    {"email": "tanthaot017@gmail.com", "password": "qafGQOUOr4m"},
     # {"email": "c07435890@gmail.com", "password": "V!etdu1492003"},
     {"email": "thichauduong154@gmail.com", "password": "H5E7SfCDuFd"},
     
@@ -23,6 +25,8 @@ def sanitize_filename(s: str) -> str:
     return re.sub(r"[^\w\-_\. ]", "_", s)
 
 def save_page_source(driver, prefix: str):
+    if not DEBUG:
+        return
     try:
         fname = f"{sanitize_filename(prefix)}_{int(time.time())}.html"
         with open(fname, "w", encoding="utf-8") as f:
@@ -36,8 +40,8 @@ def detect_google_login_error(driver):
         possible_locators = [
             (By.XPATH, "//*[@class='o6cuMc']"),
             (By.XPATH, "//*[@aria-live='assertive']"),
-            (By.XPATH, "//div[contains(@class,'RobaIf')]"),  # fallback (rare)
-            (By.XPATH, "//div[contains(@class,'dEOOab')]"),  # other possible
+            (By.XPATH, "//div[contains(@class,'RobaIf')]"),  
+            (By.XPATH, "//div[contains(@class,'dEOOab')]"),  
         ]
         for by, xp in possible_locators:
             els = driver.find_elements(by, xp)
@@ -296,6 +300,7 @@ def login_google(
         try:
             # --- Chrome options / anti-detection tweaks ---
             chrome_options = Options()
+            chrome_options.page_load_strategy = "eager"
             # chrome_options.add_argument("--headless=new")  # để debug thì comment
             chrome_options.add_argument("--incognito")
             chrome_options.add_argument("--no-sandbox")
@@ -395,20 +400,20 @@ def login_google(
             password_field = None
             try:
                 password_field = WebDriverWait(driver, 20).until(
-                    EC.element_to_be_clickable((By.NAME, "password"))
+                    EC.element_to_be_clickable((By.NAME, "Passwd"))
                 )
             except Exception:
                 try:
                     password_field = WebDriverWait(driver, 20).until(
-                        EC.element_to_be_clickable((By.NAME, "Passwd"))
-                    )
-                except Exception:
-                    try:
-                        password_field = WebDriverWait(driver, 20).until(
-                            EC.element_to_be_clickable((By.XPATH, "//input[@type='password']"))
+                    EC.element_to_be_clickable((By.NAME, "password"))
                         )
-                    except Exception:
-                        pass
+                except Exception:
+                        try:
+                            password_field = WebDriverWait(driver, 20).until(
+                                EC.element_to_be_clickable((By.XPATH, "//input[@type='password']"))
+                            )
+                        except Exception:
+                            pass
 
             if not password_field:
                 print(f"[{email}] Password field not found — saving page source and aborting this attempt.")
