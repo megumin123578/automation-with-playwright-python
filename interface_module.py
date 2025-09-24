@@ -7,7 +7,7 @@ from tkinter import ttk, messagebox, filedialog
 from tkinter.scrolledtext import ScrolledText
 APP_TITLE = "Tool Veo3"
 DEFAULT_CSV = "queued.csv"
-CSV_HEADERS = ["model", "ratio", "amount", "prompt", "upscale 4k", 'status']
+CSV_HEADERS = ["model", "ratio", "amount", "prompt", "upscale 1080", 'status']
 CSV_ENCODING = "utf-8-sig"    
 CSV_DELIMITER = "," 
 
@@ -37,6 +37,21 @@ class CSVManager:
             with open(self.path, "w", newline="", encoding=CSV_ENCODING) as f:
                 writer = csv.writer(f, delimiter=CSV_DELIMITER)
                 writer.writerow(CSV_HEADERS)
+
+    def append_rows(self, rows: list[dict]):
+        with open(self.path, "a", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
+            for row in rows:
+                writer.writerow(row)
+
+    def delete_row_exact(self, row_to_delete: dict):
+        rows = self.read_all()
+        new_rows = [row for row in rows if row != row_to_delete]
+
+        with open(self.path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
+            writer.writeheader()
+            writer.writerows(new_rows)
 
     def append_row(self, row_dict):
         with open(self.path, "a", newline="", encoding=CSV_ENCODING) as f:

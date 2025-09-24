@@ -1,16 +1,20 @@
-
+import threading
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 import tkinter.font as tkfont
 from interface_module import *
 class App(tk.Tk):
     def __init__(self, csv_path=DEFAULT_CSV):
         super().__init__()
+        
         self.title(APP_TITLE)
         self.state("zoomed")
         font = tkfont.nametofont("TkDefaultFont")
         font.configure(size=12)
         self.option_add("*Font", font)
         self.csv = CSVManager(csv_path)
-        
+
+        self._start_csv_watcher()
         # state phân trang
         self.page = 1
         self.page_size = tk.IntVar(value=DEFAULT_PAGE_SIZE)
@@ -23,6 +27,23 @@ class App(tk.Tk):
 
         self._reload_all_rows()
         self._refresh_table()
+    
+    def _start_csv_watcher(self):
+        class CSVChangeHandler(FileSystemEventHandler):
+            def __init__(self, app):
+                self.app = app
+
+            def on_modified(self, event):
+                if os.path.abspath(event.src_path) == os.path.abspath(self.app.csv.path):
+                    self.app.after(100, self.app._reload_and_refresh)
+
+
+        observer = Observer()
+        handler = CSVChangeHandler(self)
+        observer.schedule(handler, path=os.path.dirname(os.path.abspath(self.csv.path)), recursive=False)
+        observer_thread = threading.Thread(target=observer.start, daemon=True)
+        observer_thread.start()
+
 
 
 
@@ -50,9 +71,9 @@ class App(tk.Tk):
         self.amount_box.grid(row=1, column=1, sticky="ew", pady=6)
 
 
-        # Upscale 4K
+        # Upscale 1080
         self.upscale_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(frm, text="Upscale 4K", variable=self.upscale_var).grid(row=1, column=2, sticky="w", padx=(16,8), pady=6)
+        ttk.Checkbutton(frm, text="Upscale 1080", variable=self.upscale_var).grid(row=1, column=2, sticky="w", padx=(16,8), pady=6)
 
         # Prompt (multiline)
         ttk.Label(frm, text="Prompt:").grid(row=2, column=0, sticky="nw", padx=(0,8), pady=(6,4))
@@ -78,7 +99,7 @@ class App(tk.Tk):
         self.tree.pack(fill="both", expand=True, padx=12)
 
         self.tree.tag_configure("Done", background="#d1f7d1")
-        self.tree.tag_configure("Working", background="#fff2b3")
+        self.tree.tag_configure("Working", background="#FFFDD0")
 
 
         self.tree.bind("<Double-1>", self._on_row_double_click)
@@ -105,6 +126,36 @@ class App(tk.Tk):
         # Spacer
         ttk.Label(bar, text="").pack(side="right")
 
+    def _delete_selected_row(self):
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showinfo("Delete", "Please select a row to delete.")
+            return
+
+        # Xác nhận xóa
+        if not messagebox.askyesno("Confirm Delete", "Are you sure you want to delete the selected row?"):
+            return
+
+        # Lấy dữ liệu từ dòng đang chọn
+        values = self.tree.item(selected[0], "values")
+        if not values or len(values) != len(CSV_HEADERS):
+            messagebox.showwarning("Error", "Invalid row format.")
+            return
+
+        # Tạo dict từ dòng để tìm và xóa
+        row_to_delete = dict(zip(CSV_HEADERS, values))
+
+        try:
+            self.csv.delete_row_exact(row_to_delete)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to delete from CSV:\n{e}")
+            return
+
+        # Xóa khỏi view
+        self._reload_all_rows()
+        self._refresh_table()
+
+
     def _bind_shortcuts(self):
         self.bind_all("<Control-s>", lambda e: self.save_row())
         self.bind_all("<Control-S>", lambda e: self.save_row())
@@ -113,6 +164,8 @@ class App(tk.Tk):
         self.bind_all("<Control-l>", lambda e: self.clear_form())
         self.bind_all("<Control-L>", lambda e: self.clear_form())
         self.bind_all("<F5>", lambda e: self._reload_and_refresh())
+        self.bind_all("<Delete>", lambda e: self._delete_selected_row())
+
 
     # ----- Actions ----
     def _reload_and_refresh(self):
@@ -123,7 +176,7 @@ class App(tk.Tk):
         model = self.model_var.get().strip()
         ratio = self.ratio_var.get().strip()
         amount_str = self.amount_var.get().strip().replace(",", "")
-        prompt = self.prompt_txt.get("1.0", "end").strip()
+        prompt_input = self.prompt_txt.get("1.0", "end").strip()
         upscale = "✔" if self.upscale_var.get() else "✖"
         status = self.status_var.get()
 
@@ -133,21 +186,35 @@ class App(tk.Tk):
         if not ratio:
             messagebox.showwarning("Missing Value", "Please choose Ratio.")
             return
-        if not prompt:
-            messagebox.showwarning("Missing Value", "Missing prompt!.")
+        if not prompt_input:
+            messagebox.showwarning("Missing Value", "Missing prompt!")
             return
 
+        prompts = [p.strip() for p in prompt_input.splitlines() if p.strip()]
+        if not prompts:
+            messagebox.showwarning("Missing Value", "No valid prompts found.")
+            return
 
-        row = {
-            "model": model,
-            "ratio": ratio,
-            "amount": int(amount_str),
-            "prompt": prompt,
-            "upscale 4k": upscale,
-            "status": status,
-        }
+        rows = []
         try:
-            self.csv.append_row(row)
+            amount = int(amount_str)
+        except ValueError:
+            messagebox.showwarning("Invalid Value", "Amount must be an integer.")
+            return
+
+        for prompt in prompts:
+            row = {
+                "model": model,
+                "ratio": ratio,
+                "amount": amount,
+                "prompt": prompt,
+                "upscale 1080": upscale,
+                "status": status,
+            }
+            rows.append(row)
+
+        try:
+            self.csv.append_rows(rows)
         except Exception as e:
             messagebox.showerror("Can't write to file", f"file:\n{e}")
             return
@@ -155,6 +222,7 @@ class App(tk.Tk):
         self._reload_all_rows()
         self._goto_last_page()
         self.clear_form(keep_selections=True)
+
 
     def clear_form(self, keep_selections=False):
         if not keep_selections:
@@ -202,7 +270,8 @@ class App(tk.Tk):
                     if val and len(val) > 140:
                         val = val[:137] + "…"
                 values.append(val)
-            self.tree.insert("", "end", values=values)
+            status = r.get("status", "")
+            self.tree.insert("", "end", values=values, tags=(status,))
 
         self.page_info.config(text=f"Page {self.page}/{total_pages} (Total {total} lines)")
 
@@ -235,7 +304,7 @@ class App(tk.Tk):
             return
         values = self.tree.item(item_id, "values")
         detail = tk.Toplevel(self)
-        detail.title("Chi tiết bản ghi")
+        detail.title("Detail data")
         detail.geometry("720x420")
         frame = ttk.Frame(detail, padding=12)
         frame.pack(fill="both", expand=True)
@@ -251,7 +320,7 @@ class App(tk.Tk):
                 val_lbl = ttk.Label(frame, text=(values[idx] if idx < len(values) else ""))
                 val_lbl.grid(row=idx, column=1, sticky="w")
         frame.columnconfigure(1, weight=1)
-        ttk.Button(frame, text="Đóng", command=detail.destroy).grid(row=len(CSV_HEADERS), column=1, sticky="e", pady=(8,0))
+        ttk.Button(frame, text="Close", command=detail.destroy).grid(row=len(CSV_HEADERS), column=1, sticky="e", pady=(8,0))
 
 def main():
     # Đặt working dir về vị trí file .py khi chạy double-click
